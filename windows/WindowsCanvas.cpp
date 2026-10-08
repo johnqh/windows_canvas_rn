@@ -423,8 +423,10 @@ struct PictureView : winrt::implements<PictureView, winrt::Windows::Foundation::
               : baseline == TextBaseline::Bottom         ? -laid.height
                                                          : -laid.baseline;
           context.SetTransform(matrix * base);
+          // Colour fonts on: an emoji is drawn in its own colours, as a
+          // browser canvas draws it, rather than as a silhouette in the brush.
           context.DrawTextLayout({x + dx, y + dy}, laid.layout.get(), brush.get(),
-                                 D2D1_DRAW_TEXT_OPTIONS_NONE);
+                                 D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
           context.SetTransform(base);
           break;
         }

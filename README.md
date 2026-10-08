@@ -51,7 +51,8 @@ Two behaviours to know:
   uses the same DirectWrite formats the view draws with, cached per font and
   string. Elsewhere it is an approximation. Generic families map to Windows
   faces (`sans-serif` → Segoe UI, `serif` → Times New Roman, `monospace` →
-  Consolas).
+  Consolas). Emoji keep their colours (DirectWrite colour fonts are on), and
+  glyphs missing from the chosen face come from the system's font fallback.
 
 ## Windows setup
 
