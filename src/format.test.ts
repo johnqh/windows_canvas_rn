@@ -1,14 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  Composite,
   FillRule,
+  Filter,
+  FontStyle,
   FORMAT_VERSION,
+  Kerning,
   LineCap,
   LineJoin,
   Op,
+  Paint,
+  Repetition,
   Segment,
-  TextAlign,
-  TextBaseline,
+  SmoothingQuality,
+  TextRendering,
+  VariantCaps,
 } from './format.ts';
 
 const header = readFileSync(
@@ -36,11 +43,18 @@ describe('the picture format agrees with the native replay', () => {
   it.each([
     ['Op', Op],
     ['Segment', Segment],
+    ['Paint', Paint],
+    ['Repetition', Repetition],
     ['FillRule', FillRule],
     ['LineCap', LineCap],
     ['LineJoin', LineJoin],
-    ['TextAlign', TextAlign],
-    ['TextBaseline', TextBaseline],
+    ['FontStyle', FontStyle],
+    ['Kerning', Kerning],
+    ['VariantCaps', VariantCaps],
+    ['TextRendering', TextRendering],
+    ['SmoothingQuality', SmoothingQuality],
+    ['Composite', Composite],
+    ['Filter', Filter],
   ] as const)('has the same %s values', (name, values) => {
     expect(namespaceValues(name)).toEqual(values);
   });

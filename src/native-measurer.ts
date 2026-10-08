@@ -1,11 +1,12 @@
 /**
- * `measureText` answered by DirectWrite, on Windows.
+ * Text measured by DirectWrite, on Windows.
  *
- * `WindowsCanvas.measureText` (windows/WindowsCanvasModule.cpp) lays the text
- * out with the same DirectWrite text format the picture view draws it with, so
- * a label centred by its measured width is centred as drawn. A synchronous
- * call, cached, since drawing code measures the same strings every frame.
- * Elsewhere, or where the module is not compiled in, the approximation.
+ * `WindowsCanvas.measureText` (windows/WindowsCanvas.cpp) lays the text out
+ * with the same DirectWrite layout the picture view draws with, so text
+ * anchored by its measured width and baselines lands where it is drawn. A
+ * synchronous call, cached, since drawing code measures and anchors the same
+ * strings every frame. Elsewhere, or where the module is not compiled in, the
+ * approximation.
  */
 import { NativeModules, Platform } from 'react-native';
 import { approximateMeasurer, cachedMeasurer } from './measure.ts';
@@ -16,7 +17,13 @@ type WindowsCanvasModule = {
     family: string,
     size: number,
     weight: number,
-    italic: boolean,
+    style: number,
+    stretch: number,
+    letterSpacing: number,
+    wordSpacing: number,
+    kerning: number,
+    variantCaps: number,
+    rtl: boolean,
     text: string
   ) => TextMeasure;
 };
@@ -32,17 +39,23 @@ export function defaultTextMeasurer(): TextMeasurer {
   const measure = module?.measureText;
   resolved =
     Platform.OS === 'windows' && measure
-      ? cachedMeasurer((font, text) => {
+      ? cachedMeasurer((font, text, style) => {
           try {
             return measure(
               font.family,
               font.size,
               font.weight,
-              font.italic,
+              font.style,
+              font.stretch,
+              style.letterSpacing,
+              style.wordSpacing,
+              style.kerning,
+              style.variantCaps,
+              style.rtl,
               text
             );
           } catch {
-            return approximateMeasurer(font, text);
+            return approximateMeasurer(font, text, style);
           }
         })
       : approximateMeasurer;

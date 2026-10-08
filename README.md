@@ -1,81 +1,133 @@
 # @sudobility/windows_canvas_rn
 
-A canvas for React Native Windows: draw with the canvas 2D API, show the result
-with Direct2D.
+The HTML canvas 2D API for React Native Windows: draw with
+`CanvasRenderingContext2D`, show the result with Direct2D.
 
 React Native Skia has no Windows target, and react-native-svg's Windows
 renderer redraws its whole document once per element that changes — a drawing
 of a few thousand shapes costs seconds of UI-thread time. This package records
 canvas calls into a compact picture in JavaScript and replays it natively in a
-single Direct2D pass, with text laid out by DirectWrite. It plays the part an
-`SkPicture` plays for Skia.
+single Direct2D pass, with text laid out by DirectWrite and effects run as
+Direct2D effect graphs. It plays the part an `SkPicture` plays for Skia.
 
-```ts
+```tsx
 import { CanvasPicture, createRecorder } from '@sudobility/windows_canvas_rn';
 
-const ctx = createRecorder(width, height); // a CanvasRenderingContext2D subset
-ctx.fillStyle = '#1565c0';
+const ctx = createRecorder(width, height); // a CanvasRenderingContext2D
+const sky = ctx.createLinearGradient(0, 0, 0, height);
+sky.addColorStop(0, '#87ceeb');
+sky.addColorStop(1, 'white');
+ctx.fillStyle = sky;
+ctx.fillRect(0, 0, width, height);
+ctx.shadowColor = 'rgba(0, 0, 0, 0.3)';
+ctx.shadowBlur = 8;
+ctx.fillStyle = 'tomato';
 ctx.beginPath();
-ctx.arc(40, 40, 20, 0, Math.PI * 2);
+ctx.roundRect(20, 20, 120, 60, 12);
 ctx.fill();
-ctx.font = 'bold 14px sans-serif';
-ctx.fillText('Hello', 70, 45);
-const picture = ctx.finish();
+ctx.font = 'bold 16px sans-serif';
+ctx.textAlign = 'center';
+ctx.textBaseline = 'middle';
+ctx.fillStyle = 'white';
+ctx.fillText('Hello', 80, 50);
 
-<CanvasPicture picture={picture} style={{ width, height }} />;
+<CanvasPicture picture={ctx.finish()} style={{ width, height }} />;
 ```
 
 Code already written against a browser canvas or a Skia canvas draws into the
-recorder unchanged. `@sudobility/windows_canvas_rn/core` has the recorder
-without React Native, for tests and workers.
+recorder unchanged. `@sudobility/windows_canvas_rn/core` has everything but the
+view — the recorder, `Path2D`, `ImageData`, `decodePicture` — without React
+Native, for tests and workers.
 
-## What is supported
+## Coverage
 
-Paths (`moveTo`, `lineTo`, `quadraticCurveTo`, `bezierCurveTo`, `arc`,
-`ellipse`, `rect`, `closePath`), `fill` (nonzero and evenodd), `stroke` (width,
-caps, joins, miter limit, dashes), `fillRect`, `strokeRect`, `clearRect`,
-`clip`, `fillText` (with `maxWidth`, `textAlign`, `textBaseline`),
-`measureText`, the full transform API, `save`/`restore`, `globalAlpha`, and CSS
-colours (`#hex`, `rgb()`/`rgba()`, common names).
+Every member of `CanvasRenderingContext2D` is implemented, and a test fails if
+one goes missing:
 
-Not supported: gradients and patterns (drawn opaque black), `drawImage`,
-`arcTo`, `roundRect`, shadows, composite operations and filters; `strokeText`
-fills. None of them throw.
+| Area | Members |
+| --- | --- |
+| State | `save`, `restore`, `reset`, `isContextLost`, `getContextAttributes`, `canvas` |
+| Transforms | `scale`, `rotate`, `translate`, `transform`, `setTransform` (numbers or a matrix), `getTransform`, `resetTransform` |
+| Compositing | `globalAlpha`, `globalCompositeOperation` — all 26 operations, Porter-Duff and blend modes |
+| Styles | colours (every CSS Color 4 form), `createLinearGradient`, `createRadialGradient`, `createConicGradient`, `createPattern` (all four repetitions, `setTransform`) |
+| Shadows | `shadowColor`, `shadowBlur`, `shadowOffsetX`, `shadowOffsetY` |
+| Filters | `filter`: `blur`, `brightness`, `contrast`, `drop-shadow`, `grayscale`, `hue-rotate`, `invert`, `opacity`, `saturate`, `sepia` |
+| Rectangles | `clearRect`, `fillRect`, `strokeRect` |
+| Paths | `beginPath`, `closePath`, `moveTo`, `lineTo`, `quadraticCurveTo`, `bezierCurveTo`, `arc`, `arcTo`, `ellipse`, `rect`, `roundRect`, and `Path2D` (including SVG path data and `addPath`) |
+| Drawing paths | `fill` and `clip` (both fill rules), `stroke`, `isPointInPath`, `isPointInStroke` |
+| Line styles | `lineWidth`, `lineCap`, `lineJoin`, `miterLimit`, `setLineDash`, `getLineDash`, `lineDashOffset` |
+| Text | `fillText`, `strokeText` (real glyph outlines), `measureText` (full `TextMetrics`), `font`, `textAlign`, `textBaseline`, `direction`, `letterSpacing`, `wordSpacing`, `fontKerning`, `fontStretch`, `fontVariantCaps`, `textRendering` |
+| Images | `drawImage` (all three forms), `createImageData`, `putImageData`, `imageSmoothingEnabled`, `imageSmoothingQuality` |
+| Focus | `drawFocusIfNeeded`, `scrollPathIntoView` (no-ops: a picture has no focus or scroll) |
 
-Two behaviours to know:
+It also behaves as a canvas does at the edges: an unreadable colour, font or
+filter leaves the property as it was; the calls that throw in a browser
+(`addColorStop` with an offset outside 0–1, a negative radius, `drawImage` with
+something that is not an image) throw here; `fillText`'s `maxWidth` squeezes
+the text; `roundRect` scales radii that would overlap.
 
-- **Stroke widths and dashes scale by `sqrt(|det|)` of the transform**, which
-  is exact for uniform scales and rotations; a non-uniform scale strokes with
-  the average width.
-- **Text is measured natively on Windows** by a synchronous `measureText` that
-  uses the same DirectWrite formats the view draws with, cached per font and
-  string. Elsewhere it is an approximation. Generic families map to Windows
-  faces (`sans-serif` → Segoe UI, `serif` → Times New Roman, `monospace` →
-  Consolas). Emoji keep their colours (DirectWrite colour fonts are on), and
-  glyphs missing from the chosen face come from the system's font fallback.
+### The one limit
+
+**`getImageData` cannot read pixels back.** A recording has no pixels until
+the native view draws it, so it answers transparent pixels of the requested
+size and warns once. Everything that writes pixels, `putImageData` included, is
+supported.
+
+### Approximations
+
+- A radial gradient whose start circle has a radius and is not concentric with
+  its end circle is drawn about the larger circle from the smaller's centre.
+  Exact for a zero start radius and for concentric circles, which is nearly
+  every use.
+- A conic gradient is computed per pixel over the view, since Direct2D has no
+  conic brush: correct, and slower than the others.
+- `isPointInStroke` treats joins and caps as round and dashes as solid.
+- The `hanging` baseline is 80% of the em ascent; DirectWrite reports none.
+
+## Images
+
+`drawImage` and `createPattern` take:
+
+- React Native's resolved asset source, `{ uri, width, height }` — from
+  `Image.resolveAssetSource(require('./art.png'))` — or any URI with its size:
+  `file:`, plain paths, `ms-appx:` (falling back to the exe's folder when the
+  app is not packaged), `http(s):` (Metro's development assets included) and
+  `data:`;
+- an `HTMLImageElement`-like `{ src, naturalWidth, naturalHeight }`;
+- `ImageData`, or anything shaped like it;
+- another `PictureRecorder`, or a `Picture`, drawn as an image.
+
+The size given is the size the image is placed with, so a `@2x` asset draws at
+its logical size. Images load on a background thread, shared by every view; a
+picture that draws one before it has loaded is drawn again when it has.
+
+## Text
+
+Text is measured natively on Windows, by a synchronous `measureText` that lays
+it out with the same DirectWrite formats the view draws with (cached per font,
+style and string), so text is anchored where it is drawn. Elsewhere it is an
+approximation. The font's family list is honoured — the first installed family
+is used — and generic families map to the faces a browser on Windows uses
+(`sans-serif` → Segoe UI, `serif` → Times New Roman, `monospace` → Consolas).
+Emoji keep their colours, and glyphs missing from the face come from the
+system's font fallback.
 
 ## Windows setup
 
 The view is a Fabric **Composition** component (React Native Windows new
-architecture). Compile the native source into your app's project, as with any
-manually linked module:
+architecture). Import the package's MSBuild targets into the app's `.vcxproj`
+— it adds the include path and every source file, so later releases change no
+app project:
 
 ```xml
-<!-- MyApp.vcxproj -->
 <PropertyGroup>
   <WindowsCanvasRNDir>$(MSBuildThisFileDirectory)..\..\node_modules\@sudobility\windows_canvas_rn\windows\</WindowsCanvasRNDir>
 </PropertyGroup>
-<!-- in the ClCompile ItemDefinitionGroup's AdditionalIncludeDirectories: $(WindowsCanvasRNDir); -->
-<ItemGroup>
-  <ClInclude Include="$(WindowsCanvasRNDir)WindowsCanvas.h" />
-  <ClInclude Include="$(WindowsCanvasRNDir)PictureFormat.h" />
-  <ClCompile Include="$(WindowsCanvasRNDir)WindowsCanvas.cpp">
-    <PrecompiledHeader>NotUsing</PrecompiledHeader>
-  </ClCompile>
-</ItemGroup>
+<!-- after the C++ targets import -->
+<Import Project="$(WindowsCanvasRNDir)WindowsCanvas.targets" />
 ```
 
-and register it in your `IReactPackageProvider`:
+and register it in the app's `IReactPackageProvider`:
 
 ```cpp
 #include "WindowsCanvas.h"
@@ -86,8 +138,30 @@ void CreatePackage(IReactPackageBuilder const &packageBuilder) noexcept {
 }
 ```
 
-It links `d2d1.lib` and `dwrite.lib` itself. Only the JavaScript recorder runs
-on other platforms; `CanvasPicture` has no native view outside Windows.
+It links what it uses (`d2d1`, `dwrite`, `dxguid`, `windowscodecs`, `crypt32`,
+`shlwapi`) itself. Only the JavaScript recorder runs on other platforms;
+`CanvasPicture` has no native view outside Windows.
+
+## How it draws
+
+The recorder resolves canvas state as it records: points are transformed,
+arcs and rounded corners become cubic curves, colours carry the global alpha,
+text is anchored at the start of its alphabetic baseline, and a stroke is
+recorded in its own space with its transform, so the pen is exactly what a
+canvas would use however the transform scales or skews it. The composite
+operation, shadow, filter and smoothing are written as state ops only when
+they change.
+
+The view replays a picture into an offscreen bitmap on a device context of its
+own, once per change, after React's mount transaction. Source-over drawing with
+no shadow or filter goes straight to the bitmap, clipped by layers. Anything
+else is recorded into a command list and run through a Direct2D effect graph —
+the filter chain, the shadow, then a Composite or Blend effect against a copy
+of the destination — and written back through the clip as a mask, since a
+layer composites its content source-over and would undo a `copy`.
+
+`decodePicture` reads a picture back into structured ops, op for op as the
+native replay reads it.
 
 ## Development
 

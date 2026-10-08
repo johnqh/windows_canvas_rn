@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  @sudobility/windows_canvas_rn's native sources, for a React Native Windows
+  (Composition) app project. Import it from the app's .vcxproj, after the
+  C++ targets, with WindowsCanvasRNDir pointing at this folder:
+
+    <Import Project="$(WindowsCanvasRNDir)WindowsCanvas.targets" />
+
+  and call WindowsCanvas::RegisterWindowsCanvas(packageBuilder) from the app's
+  IReactPackageProvider. The list of files lives here, so a new release of
+  the package changes no app project.
+-->
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <WindowsCanvasRNDir Condition="'$(WindowsCanvasRNDir)' == ''">$(MSBuildThisFileDirectory)</WindowsCanvasRNDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(WindowsCanvasRNDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="$(WindowsCanvasRNDir)CanvasCommon.h" />
+    <ClInclude Include="$(WindowsCanvasRNDir)CanvasImages.h" />
+    <ClInclude Include="$(WindowsCanvasRNDir)CanvasReplay.h" />
+    <ClInclude Include="$(WindowsCanvasRNDir)CanvasText.h" />
+    <ClInclude Include="$(WindowsCanvasRNDir)PictureFormat.h" />
+    <ClInclude Include="$(WindowsCanvasRNDir)WindowsCanvas.h" />
+    <ClCompile Include="$(WindowsCanvasRNDir)CanvasImages.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="$(WindowsCanvasRNDir)CanvasReplay.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="$(WindowsCanvasRNDir)CanvasText.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="$(WindowsCanvasRNDir)WindowsCanvas.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemGroup>
+</Project>

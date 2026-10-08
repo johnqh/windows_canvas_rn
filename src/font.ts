@@ -1,20 +1,30 @@
 /**
- * The CSS `font` shorthand, as a canvas reads it, resolved to a family
- * DirectWrite can open.
+ * The CSS `font` shorthand, as a canvas parses it.
  *
- * `[style] [variant] [weight] size[/line-height] family[, family…]`. Only the
- * first family is kept: DirectWrite falls back per glyph on its own, so a
- * fallback list buys nothing. The generic families map to the Windows faces a
- * browser on Windows would pick.
+ * `[style || small-caps || weight || stretch] size[/line-height] family-list`,
+ * or one of the system font keywords. A value that does not parse is `null`,
+ * and the recorder then ignores the assignment, as a canvas does.
+ *
+ * Relative sizes resolve as they do for a canvas with no element to inherit
+ * from: `em` and `%` against the canvas default of 10px, `rem` against 16px.
+ * The whole family list is kept — the native side draws with the first family
+ * installed — with the generic families mapped to the faces a browser on
+ * Windows uses.
  */
+import { FontStyle } from './format.ts';
 
 export type FontSpec = {
+  /** Comma-separated, generics resolved; the native side takes the first installed. */
   family: string;
   /** px */
   size: number;
-  /** 100–900 */
+  /** 1–1000 */
   weight: number;
-  italic: boolean;
+  style: number;
+  /** DirectWrite's 1 (ultra-condensed) – 9 (ultra-expanded); 5 is normal. */
+  stretch: number;
+  /** The shorthand's `small-caps`. */
+  smallCaps: boolean;
 };
 
 const GENERIC: Record<string, string> = {
@@ -23,19 +33,57 @@ const GENERIC: Record<string, string> = {
   '-apple-system': 'Segoe UI',
   blinkmacsystemfont: 'Segoe UI',
   'ui-sans-serif': 'Segoe UI',
+  'ui-rounded': 'Segoe UI',
   serif: 'Times New Roman',
   'ui-serif': 'Times New Roman',
   monospace: 'Consolas',
   'ui-monospace': 'Consolas',
   cursive: 'Comic Sans MS',
   fantasy: 'Impact',
+  math: 'Cambria Math',
+  emoji: 'Segoe UI Emoji',
+  fangsong: 'FangSong',
 };
 
-const WEIGHTS: Record<string, number> = {
-  normal: 400,
-  bold: 700,
-  bolder: 700,
-  lighter: 300,
+export const STRETCH: Record<string, number> = {
+  'ultra-condensed': 1,
+  'extra-condensed': 2,
+  condensed: 3,
+  'semi-condensed': 4,
+  normal: 5,
+  'semi-expanded': 6,
+  expanded: 7,
+  'extra-expanded': 8,
+  'ultra-expanded': 9,
+};
+
+const SIZE_KEYWORDS: Record<string, number> = {
+  'xx-small': 9,
+  'x-small': 10,
+  small: 13,
+  medium: 16,
+  large: 18,
+  'x-large': 24,
+  'xx-large': 32,
+  'xxx-large': 48,
+  // Relative to the canvas default of 10px, by CSS's 1.2 ratio.
+  larger: 12,
+  smaller: 10 / 1.2,
+};
+
+const UNITS: Record<string, number> = {
+  px: 1,
+  pt: 4 / 3,
+  pc: 16,
+  in: 96,
+  cm: 96 / 2.54,
+  mm: 96 / 25.4,
+  q: 96 / 101.6,
+  em: 10,
+  rem: 16,
+  ex: 5,
+  ch: 5,
+  '%': 0.1,
 };
 
 /** The canvas default, `10px sans-serif`. */
@@ -43,44 +91,135 @@ export const DEFAULT_FONT: FontSpec = {
   family: 'Segoe UI',
   size: 10,
   weight: 400,
-  italic: false,
+  style: FontStyle.Normal,
+  stretch: 5,
+  smallCaps: false,
 };
 
+const SYSTEM_FONTS = new Set([
+  'caption',
+  'icon',
+  'menu',
+  'message-box',
+  'small-caption',
+  'status-bar',
+]);
+
 export function resolveFamily(family: string): string {
-  const name = family.trim().replace(/^["']|["']$/g, '');
-  return GENERIC[name.toLowerCase()] ?? (name || DEFAULT_FONT.family);
+  const name = family.trim().replace(/^(["'])(.*)\1$/, '$2');
+  return GENERIC[name.toLowerCase()] ?? name;
 }
 
-const cache = new Map<string, FontSpec>();
-
-export function parseFont(font: string): FontSpec {
-  const cached = cache.get(font);
-  if (cached) return cached;
-  // The size is the first token ending in a length unit; the families follow.
-  const match = font.match(
-    /^\s*(.*?)\s*(\d*\.?\d+)(px|pt|em|rem)(?:\s*\/\s*\S+)?\s+(.+?)\s*$/i
-  );
-  let spec = DEFAULT_FONT;
-  if (match) {
-    const [, prefix = '', amount = '10', unit = 'px', families = ''] = match;
-    const scale = { px: 1, pt: 4 / 3, em: 16, rem: 16 }[
-      unit.toLowerCase() as 'px'
-    ];
-    let weight = 400;
-    let italic = false;
-    for (const token of prefix.toLowerCase().split(/\s+/)) {
-      if (token === 'italic' || token === 'oblique') italic = true;
-      else if (WEIGHTS[token] !== undefined) weight = WEIGHTS[token]!;
-      else if (/^[1-9]00$/.test(token)) weight = Number(token);
+/** Splits a family list on commas outside quotes. */
+function families(list: string): string[] | null {
+  const out: string[] = [];
+  let current = '';
+  let quote: string | null = null;
+  for (const char of list) {
+    if (quote) {
+      current += char;
+      if (char === quote) quote = null;
+    } else if (char === '"' || char === "'") {
+      current += char;
+      quote = char;
+    } else if (char === ',') {
+      out.push(current);
+      current = '';
+    } else {
+      current += char;
     }
-    spec = {
-      family: resolveFamily(families.split(',')[0] ?? ''),
-      size: Number(amount) * (scale ?? 1),
-      weight,
-      italic,
-    };
   }
+  if (quote) return null;
+  out.push(current);
+  const resolved = out.map(resolveFamily);
+  return resolved.every(Boolean) ? resolved : null;
+}
+
+function size(text: string): number | null {
+  const keyword = SIZE_KEYWORDS[text];
+  if (keyword !== undefined) return keyword;
+  const match = text.match(/^(\d*\.?\d+)([a-z%]*)$/);
+  if (!match) return null;
+  const unit = UNITS[match[2] || 'px'];
+  if (unit === undefined || (match[2] === '' && Number(match[1]) !== 0)) {
+    return null;
+  }
+  return Number(match[1]) * unit;
+}
+
+const cache = new Map<string, FontSpec | null>();
+
+export function tryParseFont(font: string): FontSpec | null {
+  if (cache.has(font)) return cache.get(font)!;
+  const result = parse(font.trim());
   if (cache.size > 256) cache.clear();
-  cache.set(font, spec);
-  return spec;
+  cache.set(font, result);
+  return result;
+}
+
+/** `null` → the canvas default. */
+export function parseFont(font: string): FontSpec {
+  return tryParseFont(font) ?? DEFAULT_FONT;
+}
+
+function parse(font: string): FontSpec | null {
+  if (SYSTEM_FONTS.has(font.toLowerCase())) {
+    // What Windows uses for UI text: Segoe UI at 9pt.
+    return { ...DEFAULT_FONT, size: 12 };
+  }
+  // Tokens up to the family list; the family list may contain spaces.
+  const tokens = font.split(/\s+/);
+  let style: number = FontStyle.Normal;
+  let weight = 400;
+  let stretch = 5;
+  let smallCaps = false;
+  let index = 0;
+  for (; index < tokens.length; index += 1) {
+    const raw = tokens[index]!;
+    const word = raw.toLowerCase();
+    if (word === 'normal') continue;
+    if (word === 'italic') {
+      style = FontStyle.Italic;
+    } else if (word === 'oblique') {
+      style = FontStyle.Oblique;
+      // An optional angle after `oblique`.
+      if (/^-?\d*\.?\d+deg$/.test(tokens[index + 1] ?? '')) index += 1;
+    } else if (word === 'small-caps') {
+      smallCaps = true;
+    } else if (word === 'bold' || word === 'bolder') {
+      weight = 700;
+    } else if (word === 'lighter') {
+      weight = 300;
+    } else if (
+      /^\d+(\.\d+)?$/.test(word) &&
+      Number(word) >= 1 &&
+      Number(word) <= 1000
+    ) {
+      weight = Number(word);
+    } else if (STRETCH[word] !== undefined) {
+      stretch = STRETCH[word]!;
+    } else {
+      break;
+    }
+  }
+  const sizeToken = tokens[index]?.toLowerCase();
+  if (sizeToken === undefined) return null;
+  const [sizeText = '', lineHeight] = sizeToken.split('/');
+  let rest = tokens.slice(index + 1);
+  // `size / line-height` written with spaces.
+  if (lineHeight === undefined && rest[0]?.startsWith('/')) {
+    rest = rest[0] === '/' ? rest.slice(2) : rest.slice(1);
+  }
+  const px = size(sizeText);
+  if (px === null) return null;
+  const list = families(rest.join(' '));
+  if (!list) return null;
+  return {
+    family: list.join(','),
+    size: px,
+    weight,
+    style,
+    stretch,
+    smallCaps,
+  };
 }
