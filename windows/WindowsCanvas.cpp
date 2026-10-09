@@ -85,6 +85,11 @@ struct PictureProps : winrt::implements<PictureProps, RN::IComponentProps> {
   }
 
   void SetProp(uint32_t hash, winrt::hstring propName, RN::IJSValueReader value) noexcept {
+    // These props start as a copy of the previous ones, and RNW's reader
+    // appends an array's items to the vector it reads into: unemptied, a new
+    // picture was added behind the old one, and the replay never reached it.
+    if (propName == L"ops") ops.clear();
+    else if (propName == L"strings") strings.clear();
     RN::ReadProp(hash, propName, value, *this);
   }
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include <winrt/Windows.Foundation.Collections.h>
 #include <winrt/Windows.Data.Json.h>
 
 #include "CanvasImages.h"

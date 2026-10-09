@@ -187,6 +187,15 @@ struct LineSceneProps : winrt::implements<LineSceneProps, RN::IComponentProps> {
   }
 
   void SetProp(uint32_t hash, winrt::hstring propName, RN::IJSValueReader value) noexcept {
+    // These props start as a copy of the previous ones, and RNW's reader
+    // appends an array's items to the vector it reads into: unemptied, every
+    // camera after the first was added behind it and never drawn.
+    if (propName == L"vertices") vertices.clear();
+    else if (propName == L"vertexCounts") vertexCounts.clear();
+    else if (propName == L"transforms") transforms.clear();
+    else if (propName == L"colors") colors.clear();
+    else if (propName == L"camera") camera.clear();
+    else if (propName == L"fog") fog.clear();
     RN::ReadProp(hash, propName, value, *this);
     // React sends a prop only when it changed, and LineScene.tsx keeps the
     // vertices the same array until they do: this is the one signal that
