@@ -24,6 +24,7 @@
     <ClInclude Include="$(WindowsCanvasRNDir)CanvasImages.h" />
     <ClInclude Include="$(WindowsCanvasRNDir)CanvasReplay.h" />
     <ClInclude Include="$(WindowsCanvasRNDir)CanvasText.h" />
+    <ClInclude Include="$(WindowsCanvasRNDir)LineScene.h" />
     <ClInclude Include="$(WindowsCanvasRNDir)PictureFormat.h" />
     <ClInclude Include="$(WindowsCanvasRNDir)WindowsCanvas.h" />
     <ClCompile Include="$(WindowsCanvasRNDir)CanvasImages.cpp">
@@ -33,6 +34,9 @@
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="$(WindowsCanvasRNDir)CanvasText.cpp">
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="$(WindowsCanvasRNDir)LineScene.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="$(WindowsCanvasRNDir)WindowsCanvas.cpp">

@@ -112,6 +112,41 @@ is used — and generic families map to the faces a browser on Windows uses
 Emoji keep their colours, and glyphs missing from the face come from the
 system's font fallback.
 
+## 3D lines
+
+`LineScene` draws a 3D scene of coloured line segments on the GPU: Direct3D
+11, on the same device the Composition surface is drawn with, with a depth
+buffer, 4× multisampling where the device has it, and linear fog toward the
+background colour. Redrawn once per change, never on a frame loop.
+
+```tsx
+import { LineScene } from '@sudobility/windows_canvas_rn';
+
+<LineScene
+  batches={[
+    { vertices: grid, color: '#232a34' },
+    { vertices: model, matrix: modelMatrix.elements, color: 'tomato' },
+  ]}
+  camera={{ view: camera.matrixWorldInverse.elements, fovDeg: 70, near: 0.05, far: 100 }}
+  fog={{ near: 8, far: 30 }}
+  background="#12161d"
+  style={{ width, height }}
+/>;
+```
+
+The conventions are three.js's, so a three scene goes over as it is:
+matrices are column-major (`Matrix4.elements`), space is right-handed with y
+up, and the camera looks down its own -z. Each pair of vertices is a
+segment. The vertical field of view is fixed and the horizontal one follows
+the view's aspect, as a `PerspectiveCamera`'s does.
+
+Batches are packed against the previous render's (`packLineBatches` in
+`core`), so a prop whose contents did not change stays the same array and
+React leaves it out of the update: a colour or camera change sends a few
+numbers, and the vertices go to the GPU only when the geometry changes.
+Lines are one pixel wide — Direct3D has no line width, as WebGL has none in
+practice.
+
 ## Windows setup
 
 The view is a Fabric **Composition** component (React Native Windows new
@@ -139,8 +174,8 @@ void CreatePackage(IReactPackageBuilder const &packageBuilder) noexcept {
 ```
 
 It links what it uses (`d2d1`, `dwrite`, `dxguid`, `windowscodecs`, `crypt32`,
-`shlwapi`) itself. Only the JavaScript recorder runs on other platforms;
-`CanvasPicture` has no native view outside Windows.
+`shlwapi`, `d3d11`, `d3dcompiler`) itself. Only the JavaScript recorder runs on other platforms;
+`CanvasPicture` and `LineScene` have no native view outside Windows.
 
 ## How it draws
 

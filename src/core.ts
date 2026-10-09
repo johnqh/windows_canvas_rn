@@ -51,6 +51,19 @@ export {
   DEFAULT_TEXT_STYLE,
 } from './measure.ts';
 export type { TextMeasure, TextMeasurer, TextStyle } from './measure.ts';
+export {
+  IDENTITY_MATRIX,
+  packLineBatches,
+  packLineSceneCamera,
+  packLineSceneFog,
+} from './line-scene.ts';
+export type {
+  LineBatch,
+  LineSceneCamera,
+  LineSceneFog,
+  Matrix4Elements,
+  PackedLineBatches,
+} from './line-scene.ts';
 export { decodePicture } from './decode.ts';
 export type {
   DecodedOp,

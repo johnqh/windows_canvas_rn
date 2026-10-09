@@ -2,7 +2,9 @@
 
 The whole `CanvasRenderingContext2D` API as a recording context
 (`src/recorder.ts`), and a React Native Windows Composition view that replays
-the recording with Direct2D, DirectWrite and Direct2D effects (`windows/`). See
+the recording with Direct2D, DirectWrite and Direct2D effects (`windows/`).
+Beside it, `LineScene`: a Composition view that draws a 3D scene of line
+segments with Direct3D 11 (`src/line-scene.ts`, `windows/LineScene.cpp`). See
 README.md for the API, its one limit (`getImageData` cannot read back) and the
 Windows setup.
 
@@ -44,5 +46,14 @@ Windows setup.
 - **One draw per transaction.** Props, layout and mounting all call
   `Invalidate`, which posts a single draw to the UI dispatcher. Drawing inside
   each callback is the react-native-svg bug this package exists to avoid.
+- **`LineScene` draws with Direct3D on the surface's own device, inside its
+  own `ID3DDeviceContextState`.** The device is reached through the surface
+  context's target (`ID2D1Bitmap1` → DXGI surface → `ID3D11Device`) so
+  Direct2D can draw the result as a shared bitmap; when that fails it draws on
+  a device of its own and reads back through memory. The state object is
+  swapped in for the draw and out again, so neither its pipeline state nor
+  Direct2D's leaks into the other through the shared immediate context. The
+  vertex buffer is rebuilt only when `vertices` arrives in `SetProp` — which
+  is why `LineScene.tsx` must keep an unchanged vertex array the same array.
 - **Native sources are listed in `windows/WindowsCanvas.targets`**, which apps
   import. Add a file there, not in an app project.

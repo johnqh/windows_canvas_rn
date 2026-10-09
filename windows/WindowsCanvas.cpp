@@ -13,6 +13,7 @@
 
 #include "CanvasReplay.h"
 #include "CanvasText.h"
+#include "LineScene.h"
 #include "WindowsCanvas.h"
 
 namespace WindowsCanvas {
@@ -278,6 +279,7 @@ void RegisterWindowsCanvas(RN::IReactPackageBuilder const &packageBuilder) noexc
         compBuilder.SetViewFeatures(winrt::Microsoft::ReactNative::Composition::ComponentViewFeatures::Default &
                                     ~winrt::Microsoft::ReactNative::Composition::ComponentViewFeatures::Background);
       });
+  RegisterLineScene(packageBuilder);
 }
 
 } // namespace WindowsCanvas
